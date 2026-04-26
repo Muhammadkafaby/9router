@@ -976,41 +976,50 @@ pm2 startup
 ### Docker
 
 ```bash
-# Build image (from repository root)
-docker build -t 9router .
+# Production behind an existing reverse proxy
+cp .env.example .env
 
-# Run container (command used in current setup)
-docker run -d \
-  --name 9router \
-  -p 20128:20128 \
-  --env-file /root/dev/9router/.env \
-  -v 9router-data:/app/data \
-  -v 9router-usage:/root/.9router \
-  9router
+# Set these in .env:
+# ROUTER_HOST_PORT=20128
+# BASE_URL=http://127.0.0.1:20128
+# NEXT_PUBLIC_BASE_URL=https://ai.devstacklab.net
+# AUTH_COOKIE_SECURE=true
+# REQUIRE_API_KEY=true
+
+docker compose up -d --build
 ```
 
-Portable command (if you are already at repository root):
+Included files:
+- `docker-compose.yml` runs `9router` only
+- `Caddyfile.example` shows an example upstream for `ai.devstacklab.net`
+
+Direct app container only (plain HTTP) is still available:
 
 ```bash
+docker build -t 9router .
 docker run -d \
   --name 9router \
   -p 20128:20128 \
   --env-file ./.env \
   -v 9router-data:/app/data \
-  -v 9router-usage:/root/.9router \
   9router
 ```
 
-Container defaults:
-- `PORT=20128`
-- `HOSTNAME=0.0.0.0`
+Compose defaults:
+- localhost backend port `127.0.0.1:ROUTER_HOST_PORT`, default `127.0.0.1:20128`
+- internal app port `20128`
+- no attempt to bind `80` or `443`
+
+Notes:
+- `ufw allow` only means a port is permitted through the firewall; it does not mean a process is listening on that port.
+- To check actual port usage on the VPS: `ss -tulpn`
 
 Useful commands:
 
 ```bash
-docker logs -f 9router
-docker restart 9router
-docker stop 9router && docker rm 9router
+docker compose logs -f router
+docker compose restart
+docker compose down
 ```
 
 ### Environment Variables

@@ -1,4 +1,6 @@
-docker stop 9router
-docker rm 9router
-docker build -t 9router .
-docker run -d --name 9router -p 20128:20128 --env-file .env -v 9router-data:/app/data 9router
+#!/usr/bin/env sh
+set -eu
+
+docker compose down --remove-orphans
+docker rm -f 9router 2>/dev/null || true
+docker compose up -d --build
