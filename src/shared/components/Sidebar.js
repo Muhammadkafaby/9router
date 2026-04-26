@@ -149,12 +149,16 @@ export default function Sidebar({ onClose }) {
 
         {/* Logo */}
         <div className="px-6 py-4 flex flex-col gap-2">
-          <Link href="/dashboard" className="flex flex-col items-start gap-2">
-            <img src={devstackLogoUrl} alt="Devstack" className="h-10 w-auto" />
-            <h1 className="sr-only">{APP_CONFIG.name}</h1>
-            <span className="text-xs text-text-muted">
-              v{APP_CONFIG.version}
-            </span>
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <img src={devstackLogoUrl} alt="Devstack" className="h-10 w-auto shrink-0" />
+            <div className="flex min-w-0 flex-col">
+              <h1 className="text-lg font-semibold tracking-tight leading-tight text-text-main">
+                {APP_CONFIG.name}
+              </h1>
+              <span className="text-xs text-text-muted">
+                v{APP_CONFIG.version}
+              </span>
+            </div>
           </Link>
           {updateInfo && (
             <div className="flex flex-col gap-1.5 rounded p-1 -m-1">
