@@ -13,6 +13,10 @@ import { ConfirmModal } from "./Modal";
 
 // const VISIBLE_MEDIA_KINDS = ["embedding", "image", "imageToText", "tts", "stt", "webSearch", "webFetch", "video", "music"];
 const VISIBLE_MEDIA_KINDS = ["embedding", "image", "tts"];
+const devstackLogoUrl = new URL(
+  "../../../images/devstack_icon.svg",
+  import.meta.url,
+).toString();
 
 const navItems = [
   { href: "/dashboard/endpoint", label: "Endpoint", icon: "api" },
@@ -52,22 +56,28 @@ export default function Sidebar({ onClose }) {
 
   useEffect(() => {
     fetch("/api/settings")
-      .then(res => res.json())
-      .then(data => { if (data.enableTranslator) setEnableTranslator(true); })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.enableTranslator) setEnableTranslator(true);
+      })
       .catch(() => {});
   }, []);
 
   // Lazy check for new npm version on mount
   useEffect(() => {
     fetch("/api/version")
-      .then(res => res.json())
-      .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.hasUpdate) setUpdateInfo(data);
+      })
       .catch(() => {});
   }, []);
 
   const isActive = (href) => {
     if (href === "/dashboard/endpoint") {
-      return pathname === "/dashboard" || pathname.startsWith("/dashboard/endpoint");
+      return (
+        pathname === "/dashboard" || pathname.startsWith("/dashboard/endpoint")
+      );
     }
     return pathname.startsWith(href);
   };
@@ -79,7 +89,10 @@ export default function Sidebar({ onClose }) {
       const res = await fetch("/api/version/update", { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(data.message || "Update failed. Please run the install command manually.");
+        alert(
+          data.message ||
+            "Update failed. Please run the install command manually.",
+        );
         setIsUpdating(false);
         return;
       }
@@ -100,11 +113,16 @@ export default function Sidebar({ onClose }) {
           const data = await res.json();
           if (!stopped) setUpdateStatus(data);
         }
-      } catch { /* updater not ready yet or finished */ }
+      } catch {
+        /* updater not ready yet or finished */
+      }
     };
     tick();
     const id = setInterval(tick, UPDATER_CONFIG.statusPollIntervalMs);
-    return () => { stopped = true; clearInterval(id); };
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
   }, [isUpdating, isDisconnected, STATUS_URL]);
 
   const handleShutdown = async () => {
@@ -131,16 +149,12 @@ export default function Sidebar({ onClose }) {
 
         {/* Logo */}
         <div className="px-6 py-4 flex flex-col gap-2">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="flex items-center justify-center size-9 rounded bg-linear-to-br from-[#f97815] to-[#c2590a]">
-              <span className="material-symbols-outlined text-white text-[20px]">hub</span>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-semibold tracking-tight text-text-main">
-                {APP_CONFIG.name}
-              </h1>
-              <span className="text-xs text-text-muted">v{APP_CONFIG.version}</span>
-            </div>
+          <Link href="/dashboard" className="flex flex-col items-start gap-2">
+            <img src={devstackLogoUrl} alt="Devstack" className="h-10 w-auto" />
+            <h1 className="sr-only">{APP_CONFIG.name}</h1>
+            <span className="text-xs text-text-muted">
+              v{APP_CONFIG.version}
+            </span>
           </Link>
           {updateInfo && (
             <div className="flex flex-col gap-1.5 rounded p-1 -m-1">
@@ -179,13 +193,15 @@ export default function Sidebar({ onClose }) {
                 "flex items-center gap-3 px-4 py-2 rounded-lg transition-all group",
                 isActive(item.href)
                   ? "bg-primary/10 text-primary"
-                  : "text-text-muted hover:bg-surface/50 hover:text-text-main"
+                  : "text-text-muted hover:bg-surface/50 hover:text-text-main",
               )}
             >
               <span
                 className={cn(
                   "material-symbols-outlined text-[18px]",
-                  isActive(item.href) ? "fill-1" : "group-hover:text-primary transition-colors"
+                  isActive(item.href)
+                    ? "fill-1"
+                    : "group-hover:text-primary transition-colors",
                 )}
               >
                 {item.icon}
@@ -207,30 +223,45 @@ export default function Sidebar({ onClose }) {
                 "w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all group",
                 pathname.startsWith("/dashboard/media-providers")
                   ? "bg-primary/10 text-primary"
-                  : "text-text-muted hover:bg-surface/50 hover:text-text-main"
+                  : "text-text-muted hover:bg-surface/50 hover:text-text-main",
               )}
             >
-              <span className="material-symbols-outlined text-[18px]">perm_media</span>
-              <span className="text-sm font-medium flex-1 text-left">Media Providers</span>
-              <span className="material-symbols-outlined text-[14px] transition-transform" style={{ transform: mediaOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+              <span className="material-symbols-outlined text-[18px]">
+                perm_media
+              </span>
+              <span className="text-sm font-medium flex-1 text-left">
+                Media Providers
+              </span>
+              <span
+                className="material-symbols-outlined text-[14px] transition-transform"
+                style={{
+                  transform: mediaOpen ? "rotate(180deg)" : "rotate(0deg)",
+                }}
+              >
                 expand_more
               </span>
             </button>
             {mediaOpen && (
               <div className="pl-4">
-                {MEDIA_PROVIDER_KINDS.filter((k) => VISIBLE_MEDIA_KINDS.includes(k.id)).map((kind) => (
+                {MEDIA_PROVIDER_KINDS.filter((k) =>
+                  VISIBLE_MEDIA_KINDS.includes(k.id),
+                ).map((kind) => (
                   <Link
                     key={kind.id}
                     href={`/dashboard/media-providers/${kind.id}`}
                     onClick={onClose}
                     className={cn(
                       "flex items-center gap-3 px-4 py-1.5 rounded-lg transition-all group",
-                      pathname.startsWith(`/dashboard/media-providers/${kind.id}`)
+                      pathname.startsWith(
+                        `/dashboard/media-providers/${kind.id}`,
+                      )
                         ? "bg-primary/10 text-primary"
-                        : "text-text-muted hover:bg-surface/50 hover:text-text-main"
+                        : "text-text-muted hover:bg-surface/50 hover:text-text-main",
                     )}
                   >
-                    <span className="material-symbols-outlined text-[16px]">{kind.icon}</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      {kind.icon}
+                    </span>
                     <span className="text-sm">{kind.label}</span>
                   </Link>
                 ))}
@@ -246,13 +277,15 @@ export default function Sidebar({ onClose }) {
                   "flex items-center gap-3 px-4 py-2 rounded-lg transition-all group",
                   isActive(item.href)
                     ? "bg-primary/10 text-primary"
-                    : "text-text-muted hover:bg-surface/50 hover:text-text-main"
+                    : "text-text-muted hover:bg-surface/50 hover:text-text-main",
                 )}
               >
                 <span
                   className={cn(
                     "material-symbols-outlined text-[18px]",
-                    isActive(item.href) ? "fill-1" : "group-hover:text-primary transition-colors"
+                    isActive(item.href)
+                      ? "fill-1"
+                      : "group-hover:text-primary transition-colors",
                   )}
                 >
                   {item.icon}
@@ -263,7 +296,8 @@ export default function Sidebar({ onClose }) {
 
             {/* Debug items (inside System section, before Settings) */}
             {debugItems.map((item) => {
-              const show = item.href !== "/dashboard/translator" || enableTranslator;
+              const show =
+                item.href !== "/dashboard/translator" || enableTranslator;
               return show ? (
                 <Link
                   key={item.href}
@@ -273,13 +307,15 @@ export default function Sidebar({ onClose }) {
                     "flex items-center gap-3 px-4 py-2 rounded-lg transition-all group",
                     isActive(item.href)
                       ? "bg-primary/10 text-primary"
-                      : "text-text-muted hover:bg-surface/50 hover:text-text-main"
+                      : "text-text-muted hover:bg-surface/50 hover:text-text-main",
                   )}
                 >
                   <span
                     className={cn(
                       "material-symbols-outlined text-[18px]",
-                      isActive(item.href) ? "fill-1" : "group-hover:text-primary transition-colors"
+                      isActive(item.href)
+                        ? "fill-1"
+                        : "group-hover:text-primary transition-colors",
                     )}
                   >
                     {item.icon}
@@ -297,13 +333,15 @@ export default function Sidebar({ onClose }) {
                 "flex items-center gap-3 px-4 py-2 rounded-lg transition-all group",
                 isActive("/dashboard/profile")
                   ? "bg-primary/10 text-primary"
-                  : "text-text-muted hover:bg-surface/50 hover:text-text-main"
+                  : "text-text-muted hover:bg-surface/50 hover:text-text-main",
               )}
             >
               <span
                 className={cn(
                   "material-symbols-outlined text-[18px]",
-                  isActive("/dashboard/profile") ? "fill-1" : "group-hover:text-primary transition-colors"
+                  isActive("/dashboard/profile")
+                    ? "fill-1"
+                    : "group-hover:text-primary transition-colors",
                 )}
               >
                 settings
@@ -368,11 +406,20 @@ export default function Sidebar({ onClose }) {
           ) : (
             <div className="text-center p-8">
               <div className="flex items-center justify-center size-16 rounded-full bg-red-500/20 text-red-500 mx-auto mb-4">
-                <span className="material-symbols-outlined text-[32px]">power_off</span>
+                <span className="material-symbols-outlined text-[32px]">
+                  power_off
+                </span>
               </div>
-              <h2 className="text-xl font-semibold text-white mb-2">Server Disconnected</h2>
-              <p className="text-text-muted mb-6">The proxy server has been stopped.</p>
-              <Button variant="secondary" onClick={() => globalThis.location.reload()}>
+              <h2 className="text-xl font-semibold text-white mb-2">
+                Server Disconnected
+              </h2>
+              <p className="text-text-muted mb-6">
+                The proxy server has been stopped.
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => globalThis.location.reload()}
+              >
                 Reload Page
               </Button>
             </div>
@@ -406,46 +453,74 @@ function UpdateProgress({ status, latestVersion, installCmd, copied, onCopy }) {
     {
       key: "waiting",
       label: "Waiting for app processes to exit",
-      state: phase === "waitingForExit" ? "active" :
-        (status && phase !== "starting" ? "done" : "pending"),
+      state:
+        phase === "waitingForExit"
+          ? "active"
+          : status && phase !== "starting"
+            ? "done"
+            : "pending",
     },
     {
       key: "installing",
-      label: attempt > 1 ? `Installing v${latestVersion || "latest"} (attempt ${attempt}/${maxRetries})` : `Installing v${latestVersion || "latest"}`,
-      state: done ? (success ? "done" : "error") : (phase === "installing" ? "active" : "pending"),
+      label:
+        attempt > 1
+          ? `Installing v${latestVersion || "latest"} (attempt ${attempt}/${maxRetries})`
+          : `Installing v${latestVersion || "latest"}`,
+      state: done
+        ? success
+          ? "done"
+          : "error"
+        : phase === "installing"
+          ? "active"
+          : "pending",
     },
     {
       key: "finished",
-      label: done && success ? "Installed — ready to restart" : "Waiting to finish",
-      state: done && success ? "done" : (done && !success ? "error" : "pending"),
+      label:
+        done && success ? "Installed — ready to restart" : "Waiting to finish",
+      state: done && success ? "done" : done && !success ? "error" : "pending",
     },
   ];
 
   return (
     <div className="w-full max-w-lg rounded-xl bg-neutral-900/95 border border-white/10 p-6 text-white">
       <div className="flex items-center gap-3 mb-4">
-        <div className={cn(
-          "flex items-center justify-center size-11 rounded-full",
-          done && success ? "bg-green-500/20 text-green-400" :
-          done && !success ? "bg-red-500/20 text-red-400" :
-          "bg-blue-500/20 text-blue-400"
-        )}>
-          <span className={cn(
-            "material-symbols-outlined text-[24px]",
-            !done && "animate-spin"
-          )}>
-            {done && success ? "check_circle" : done && !success ? "error" : "progress_activity"}
+        <div
+          className={cn(
+            "flex items-center justify-center size-11 rounded-full",
+            done && success
+              ? "bg-green-500/20 text-green-400"
+              : done && !success
+                ? "bg-red-500/20 text-red-400"
+                : "bg-blue-500/20 text-blue-400",
+          )}
+        >
+          <span
+            className={cn(
+              "material-symbols-outlined text-[24px]",
+              !done && "animate-spin",
+            )}
+          >
+            {done && success
+              ? "check_circle"
+              : done && !success
+                ? "error"
+                : "progress_activity"}
           </span>
         </div>
         <div>
           <h2 className="text-lg font-semibold">
-            {done && success ? "Update Completed" : done && !success ? "Update Failed" : "Updating 9Router"}
+            {done && success
+              ? "Update Completed"
+              : done && !success
+                ? "Update Failed"
+                : "Updating 9Router"}
           </h2>
           <p className="text-xs text-white/60">
             {done && success
               ? `Installed v${latestVersion || "latest"} successfully`
               : done && !success
-                ? (errorMsg || "Installation failed")
+                ? errorMsg || "Installation failed"
                 : `Installing v${latestVersion || "latest"} from npm...`}
           </p>
         </div>
@@ -455,20 +530,30 @@ function UpdateProgress({ status, latestVersion, installCmd, copied, onCopy }) {
       <ul className="space-y-2 mb-4">
         {steps.map((s) => (
           <li key={s.key} className="flex items-center gap-3 text-sm">
-            <span className={cn(
-              "material-symbols-outlined text-[18px] shrink-0",
-              s.state === "done" && "text-green-400",
-              s.state === "active" && "text-blue-400 animate-pulse",
-              s.state === "error" && "text-red-400",
-              s.state === "pending" && "text-white/30"
-            )}>
-              {s.state === "done" ? "check_circle" :
-                s.state === "error" ? "cancel" :
-                  s.state === "active" ? "radio_button_checked" : "radio_button_unchecked"}
+            <span
+              className={cn(
+                "material-symbols-outlined text-[18px] shrink-0",
+                s.state === "done" && "text-green-400",
+                s.state === "active" && "text-blue-400 animate-pulse",
+                s.state === "error" && "text-red-400",
+                s.state === "pending" && "text-white/30",
+              )}
+            >
+              {s.state === "done"
+                ? "check_circle"
+                : s.state === "error"
+                  ? "cancel"
+                  : s.state === "active"
+                    ? "radio_button_checked"
+                    : "radio_button_unchecked"}
             </span>
-            <span className={cn(
-              s.state === "pending" ? "text-white/40" : "text-white/90"
-            )}>{s.label}</span>
+            <span
+              className={cn(
+                s.state === "pending" ? "text-white/40" : "text-white/90",
+              )}
+            >
+              {s.label}
+            </span>
           </li>
         ))}
       </ul>
@@ -486,15 +571,25 @@ function UpdateProgress({ status, latestVersion, installCmd, copied, onCopy }) {
       {done && success ? (
         <div className="space-y-2">
           <p className="text-sm text-white/80">
-            Run <code className="px-1.5 py-0.5 rounded bg-white/10 text-green-400">9router</code> in your terminal to start the new version.
+            Run{" "}
+            <code className="px-1.5 py-0.5 rounded bg-white/10 text-green-400">
+              9router
+            </code>{" "}
+            in your terminal to start the new version.
           </p>
-          <Button variant="secondary" fullWidth onClick={() => globalThis.location.reload()}>
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => globalThis.location.reload()}
+          >
             Reload Page
           </Button>
         </div>
       ) : done && !success ? (
         <div className="space-y-2">
-          <p className="text-sm text-white/80">Run the install command manually:</p>
+          <p className="text-sm text-white/80">
+            Run the install command manually:
+          </p>
           <button
             onClick={onCopy}
             className="w-full text-left px-3 py-2 rounded bg-white/5 hover:bg-white/10 transition-colors"

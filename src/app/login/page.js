@@ -4,6 +4,11 @@ import { useState, useEffect } from "react";
 import { Card, Button, Input } from "@/shared/components";
 import { useRouter } from "next/navigation";
 
+const devstackLogoUrl = new URL(
+  "../../../images/devstack_logo.svg",
+  import.meta.url,
+).toString();
+
 export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -15,7 +20,8 @@ export default function LoginPage() {
     async function checkAuth() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+      const baseUrl =
+        typeof window !== "undefined" ? window.location.origin : "";
 
       try {
         const res = await fetch(`${baseUrl}/api/settings`, {
@@ -85,8 +91,15 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-bg p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-primary mb-2">9Router</h1>
-          <p className="text-text-muted">Enter your password to access the dashboard</p>
+          <img
+            src={devstackLogoUrl}
+            alt="Devstack"
+            className="mx-auto h-16 w-auto mb-2"
+          />
+          <h1 className="sr-only">Devstack</h1>
+          <p className="text-text-muted">
+            Enter your password to access the dashboard
+          </p>
         </div>
 
         <Card>
@@ -112,10 +125,6 @@ export default function LoginPage() {
             >
               Login
             </Button>
-
-            <p className="text-xs text-center text-text-muted mt-2">
-              Default password is <code className="bg-sidebar px-1 rounded">123456</code>
-            </p>
           </form>
         </Card>
       </div>

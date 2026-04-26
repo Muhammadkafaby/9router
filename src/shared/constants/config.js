@@ -2,14 +2,15 @@ import pkg from "../../../package.json" with { type: "json" };
 
 // App configuration
 export const APP_CONFIG = {
-  name: "9Router proxy",
+  name: "DevstackCode",
   description: "AI Infrastructure Management",
   version: pkg.version,
 };
 
 // GitHub configuration
 export const GITHUB_CONFIG = {
-  changelogUrl: "https://raw.githubusercontent.com/decolua/9router/refs/heads/master/CHANGELOG.md",
+  changelogUrl:
+    "https://raw.githubusercontent.com/decolua/9router/refs/heads/master/CHANGELOG.md",
 };
 
 // Updater configuration
@@ -65,9 +66,12 @@ export const PROVIDER_ENDPOINTS = {
   minimax: "https://api.minimax.io/anthropic/v1/messages",
   "minimax-cn": "https://api.minimaxi.com/anthropic/v1/messages",
   alicode: "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
-  "alicode-intl": "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions",
-  "volcengine-ark": "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions",
-  byteplus: "https://ark.ap-southeast.bytepluses.com/api/coding/v3/chat/completions",
+  "alicode-intl":
+    "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions",
+  "volcengine-ark":
+    "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions",
+  byteplus:
+    "https://ark.ap-southeast.bytepluses.com/api/coding/v3/chat/completions",
   openai: "https://api.openai.com/v1/chat/completions",
   anthropic: "https://api.anthropic.com/v1/messages",
   gemini: "https://generativelanguage.googleapis.com/v1beta/models",
@@ -86,7 +90,4 @@ export {
 } from "./providers.js";
 
 // Re-export from models.js for backward compatibility
-export {
-  PROVIDER_MODELS,
-  AI_MODELS,
-} from "./models.js";
+export { PROVIDER_MODELS, AI_MODELS } from "./models.js";
