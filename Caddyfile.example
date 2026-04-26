@@ -1,4 +1,4 @@
-ai.devstacklab.net {
+ai.devstacklabs.net {
     encode gzip zstd
     reverse_proxy 127.0.0.1:20128
 }

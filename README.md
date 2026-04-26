@@ -982,7 +982,7 @@ cp .env.example .env
 # Set these in .env:
 # ROUTER_HOST_PORT=20128
 # BASE_URL=http://127.0.0.1:20128
-# NEXT_PUBLIC_BASE_URL=https://ai.devstacklab.net
+# NEXT_PUBLIC_BASE_URL=https://ai.devstacklabs.net
 # AUTH_COOKIE_SECURE=true
 # REQUIRE_API_KEY=true
 
@@ -991,7 +991,7 @@ docker compose up -d --build
 
 Included files:
 - `docker-compose.yml` runs `9router` only
-- `Caddyfile.example` shows an example upstream for `ai.devstacklab.net`
+- `Caddyfile.example` shows an example upstream for `ai.devstacklabs.net`
 
 Direct app container only (plain HTTP) is still available:
 

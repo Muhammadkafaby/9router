@@ -23,7 +23,7 @@ PORT=20128
 HOSTNAME=0.0.0.0
 NODE_ENV=production
 BASE_URL=http://127.0.0.1:20128
-NEXT_PUBLIC_BASE_URL=https://ai.devstacklab.net
+NEXT_PUBLIC_BASE_URL=https://ai.devstacklabs.net
 API_KEY_SECRET=endpoint-proxy-api-key-secret
 MACHINE_ID_SALT=endpoint-proxy-salt
 AUTH_COOKIE_SECURE=true
@@ -46,7 +46,7 @@ docker compose logs -f router
 
 - Host backend port: `127.0.0.1:ROUTER_HOST_PORT` on the VPS, default `127.0.0.1:20128`
 - Internal app port: `20128` inside the container
-- Public HTTPS URL stays on your existing reverse proxy, for example `https://ai.devstacklab.net`
+- Public HTTPS URL stays on your existing reverse proxy, for example `https://ai.devstacklabs.net`
 
 Example direct backend URL on the VPS:
 
@@ -86,7 +86,7 @@ If another reverse proxy already owns ports `80` and `443`, keep using it and pr
 Example Caddy site block when Caddy runs on the host:
 
 ```caddy
-ai.devstacklab.net {
+ai.devstacklabs.net {
     encode gzip zstd
     reverse_proxy 127.0.0.1:20128
 }
