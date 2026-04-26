@@ -999,6 +999,8 @@ docker network ls
 ./start.sh
 ```
 
+If `REVERSE_PROXY_NETWORK` is left blank, `start.sh` will try to auto-detect the first running Caddy/Nginx/Traefik Docker network and connect `9router` to it.
+
 Included files:
 - `docker-compose.yml` runs `9router` only
 - `docker-compose.proxy.yml` attaches `9router` to an existing reverse-proxy Docker network
@@ -1034,6 +1036,7 @@ Notes:
 - To check actual port usage on the VPS: `ss -tulpn`
 - If Caddy runs in Docker, `reverse_proxy 127.0.0.1:20128` points back to the Caddy container itself, not to `9router`.
 - `start.sh` auto-loads `.env`, so Docker network settings do not need to be exported manually.
+- `start.sh` also auto-detects a reverse-proxy Docker network when `REVERSE_PROXY_NETWORK` is blank.
 
 Useful commands:
 

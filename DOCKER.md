@@ -48,6 +48,8 @@ Or use the helper script:
 
 `start.sh` reads `.env` automatically, so setting `REVERSE_PROXY_NETWORK` there is enough.
 
+If `REVERSE_PROXY_NETWORK` is left blank, `start.sh` will try to auto-detect the first running Caddy/Nginx/Traefik Docker network and connect `9router` to it automatically.
+
 If your existing Caddy or Nginx runs in Docker, attach `9router` to that external network too:
 
 ```bash
