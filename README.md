@@ -980,18 +980,37 @@ pm2 startup
 cp .env.example .env
 
 # Set these in .env:
+# ROUTER_HOST_BIND=127.0.0.1
 # ROUTER_HOST_PORT=20128
+# REVERSE_PROXY_NETWORK=landstation-laravel_default
 # BASE_URL=http://127.0.0.1:20128
 # NEXT_PUBLIC_BASE_URL=https://ai.devstacklabs.net
 # AUTH_COOKIE_SECURE=true
 # REQUIRE_API_KEY=true
 
-docker compose up -d --build
+./start.sh
+```
+
+If your existing Caddy/Nginx also runs in Docker, attach `9router` to the same external network:
+
+```bash
+docker network ls
+# Put REVERSE_PROXY_NETWORK=landstation-laravel_default in .env, then:
+./start.sh
 ```
 
 Included files:
 - `docker-compose.yml` runs `9router` only
-- `Caddyfile.example` shows an example upstream for `ai.devstacklabs.net`
+- `docker-compose.proxy.yml` attaches `9router` to an existing reverse-proxy Docker network
+- `Caddyfile.example` shows both host-Caddy and Docker-Caddy upstream examples for `ai.devstacklabs.net`
+
+For a quick public test without a reverse proxy, set:
+
+```env
+ROUTER_HOST_BIND=0.0.0.0
+```
+
+Then restart and open `http://<server-ip>:ROUTER_HOST_PORT`.
 
 Direct app container only (plain HTTP) is still available:
 
@@ -1006,13 +1025,15 @@ docker run -d \
 ```
 
 Compose defaults:
-- localhost backend port `127.0.0.1:ROUTER_HOST_PORT`, default `127.0.0.1:20128`
+- backend port `ROUTER_HOST_BIND:ROUTER_HOST_PORT`, default `127.0.0.1:20128`
 - internal app port `20128`
 - no attempt to bind `80` or `443`
 
 Notes:
 - `ufw allow` only means a port is permitted through the firewall; it does not mean a process is listening on that port.
 - To check actual port usage on the VPS: `ss -tulpn`
+- If Caddy runs in Docker, `reverse_proxy 127.0.0.1:20128` points back to the Caddy container itself, not to `9router`.
+- `start.sh` auto-loads `.env`, so Docker network settings do not need to be exported manually.
 
 Useful commands:
 
@@ -1029,6 +1050,9 @@ docker compose down
 | `JWT_SECRET` | `9router-default-secret-change-me` | JWT signing secret for dashboard auth cookie (**change in production**) |
 | `INITIAL_PASSWORD` | `123456` | First login password when no saved hash exists |
 | `DATA_DIR` | `~/.9router` | Main app database location (`db.json`) |
+| `ROUTER_HOST_BIND` | `127.0.0.1` | Host bind address for the published backend port (`0.0.0.0` for direct public testing) |
+| `ROUTER_HOST_PORT` | `20128` | Host port published by Docker for the internal app port |
+| `REVERSE_PROXY_NETWORK` | empty | External Docker network name used when an existing Caddy/Nginx container should proxy to `9router:20128` |
 | `PORT` | framework default | Service port (`20128` in examples) |
 | `HOSTNAME` | framework default | Bind host (Docker defaults to `0.0.0.0`) |
 | `NODE_ENV` | runtime default | Set `production` for deploy |

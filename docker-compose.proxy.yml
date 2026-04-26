@@ -1,0 +1,12 @@
+services:
+  router:
+    networks:
+      default:
+      reverse-proxy:
+        aliases:
+          - 9router
+
+networks:
+  reverse-proxy:
+    external: true
+    name: ${REVERSE_PROXY_NETWORK:-reverse-proxy}

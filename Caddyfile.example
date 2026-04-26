@@ -1,4 +1,13 @@
+# Example for Caddy running on the VPS host directly:
 ai.devstacklabs.net {
     encode gzip zstd
     reverse_proxy 127.0.0.1:20128
 }
+
+# If Caddy runs in Docker on the same external network as 9router,
+# use this upstream instead of 127.0.0.1:20128:
+#
+# ai.devstacklabs.net {
+#     encode gzip zstd
+#     reverse_proxy 9router:20128
+# }
