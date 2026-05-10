@@ -4,19 +4,21 @@ const path = require("path");
 const dns = require("dns");
 const { promisify } = require("util");
 const { execSync } = require("child_process");
-const { log, err } = require("./logger");
-const { TARGET_HOSTS, URL_PATTERNS, getToolForHost } = require("./config");
+const { log, err, dumpRequest, createResponseDumper } = require("./logger");
+const { TARGET_HOSTS, URL_PATTERNS, MODEL_SYNONYMS, getToolForHost } = require("./config");
 const { DATA_DIR, MITM_DIR } = require("./paths");
 const { getCertForDomain } = require("./cert/generate");
-
-const DB_FILE = path.join(DATA_DIR, "db.json");
+const { getMitmAlias } = require("./dbReader");
 const LOCAL_PORT = 443;
 const IS_WIN = process.platform === "win32";
-const ENABLE_FILE_LOG = false;
-const LOG_DIR = path.join(DATA_DIR, "logs", "mitm");
+const ENABLE_FILE_LOG = true;
 const INTERNAL_REQUEST_HEADER = { name: "x-request-source", value: "local" };
 
-if (ENABLE_FILE_LOG && !fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+// Host rewrite for upstream forward: PROD cloudcode-pa is rate-limited (429),
+// daily-cloudcode-pa (dev endpoint) accepts same body+token. Same trick as open-sse.
+const HOST_REWRITE = {
+  "cloudcode-pa.googleapis.com": "daily-cloudcode-pa.googleapis.com",
+};
 
 // Load handlers — dev/ overrides handlers/ for private implementations
 function loadHandler(name) {
@@ -34,15 +36,18 @@ const handlers = {
 // ── SSL / SNI ─────────────────────────────────────────────────
 
 const certCache = new Map();
+let rootCAPem;
 
 function sniCallback(servername, cb) {
   try {
     if (certCache.has(servername)) return cb(null, certCache.get(servername));
     const certData = getCertForDomain(servername);
     if (!certData) return cb(new Error(`Failed to generate cert for ${servername}`));
-    const ctx = require("tls").createSecureContext({ key: certData.key, cert: certData.cert });
+    const ctx = require("tls").createSecureContext({
+      key: certData.key,
+      cert: `${certData.cert}\n${rootCAPem}`
+    });
     certCache.set(servername, ctx);
-    log(`🔐 Cert generated: ${servername}`);
     cb(null, ctx);
   } catch (e) {
     err(`SNI error for ${servername}: ${e.message}`);
@@ -52,11 +57,10 @@ function sniCallback(servername, cb) {
 
 let sslOptions;
 try {
-  sslOptions = {
-    key: fs.readFileSync(path.join(MITM_DIR, "rootCA.key")),
-    cert: fs.readFileSync(path.join(MITM_DIR, "rootCA.crt")),
-    SNICallback: sniCallback
-  };
+  const rootKey = fs.readFileSync(path.join(MITM_DIR, "rootCA.key"));
+  const rootCert = fs.readFileSync(path.join(MITM_DIR, "rootCA.crt"));
+  rootCAPem = rootCert.toString("utf8");
+  sslOptions = { key: rootKey, cert: rootCert, SNICallback: sniCallback };
 } catch (e) {
   err(`Root CA not found: ${e.message}`);
   process.exit(1);
@@ -103,35 +107,28 @@ function extractModel(url, body) {
 function getMappedModel(tool, model) {
   if (!model) return null;
   try {
-    if (!fs.existsSync(DB_FILE)) return null;
-    const db = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
-    const aliases = db.mitmAlias?.[tool];
+    const aliases = getMitmAlias(tool);
     if (!aliases) return null;
-    if (aliases[model]) return aliases[model];
+    // Normalize via synonym map (e.g., gemini-default → gemini-3-flash)
+    const lookup = MODEL_SYNONYMS?.[tool]?.[model] || model;
+    if (aliases[lookup]) return aliases[lookup];
     // Prefix match fallback
-    const prefixKey = Object.keys(aliases).find(k => k && aliases[k] && (model.startsWith(k) || k.startsWith(model)));
+    const prefixKey = Object.keys(aliases).find(k => k && aliases[k] && (lookup.startsWith(k) || k.startsWith(lookup)));
     return prefixKey ? aliases[prefixKey] : null;
   } catch { return null; }
-}
-
-function saveRequestLog(url, bodyBuffer) {
-  if (!ENABLE_FILE_LOG) return;
-  try {
-    const ts = new Date().toISOString().replace(/[:.]/g, "-");
-    const slug = url.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 60);
-    const body = JSON.parse(bodyBuffer.toString());
-    fs.writeFileSync(path.join(LOG_DIR, `${ts}_${slug}.json`), JSON.stringify(body, null, 2));
-  } catch { /* ignore */ }
 }
 
 /**
  * Forward request to real upstream.
  * Optional onResponse(rawBuffer) callback — if provided, tees the response
  * so it's both forwarded to client AND passed to the callback for inspection.
+ * Also tees full stream into a dump file when ENABLE_FILE_LOG is on.
  */
 async function passthrough(req, res, bodyBuffer, onResponse) {
-  const targetHost = (req.headers.host || TARGET_HOSTS[0]).split(":")[0];
+  const originalHost = (req.headers.host || TARGET_HOSTS[0]).split(":")[0];
+  const targetHost = HOST_REWRITE[originalHost] || originalHost;
   const targetIP = await resolveTargetIP(targetHost);
+  const dumper = ENABLE_FILE_LOG ? createResponseDumper(req, "passthrough") : null;
 
   const forwardReq = https.request({
     hostname: targetIP,
@@ -143,23 +140,30 @@ async function passthrough(req, res, bodyBuffer, onResponse) {
     rejectUnauthorized: false
   }, (forwardRes) => {
     res.writeHead(forwardRes.statusCode, forwardRes.headers);
+    if (dumper) dumper.writeHeader(forwardRes.statusCode, forwardRes.headers);
 
-    if (!onResponse) {
+    if (!onResponse && !dumper) {
       forwardRes.pipe(res);
       return;
     }
 
-    // Tee: forward to client AND buffer for callback
+    // Tee: forward to client AND optionally buffer + dump
     const chunks = [];
-    forwardRes.on("data", chunk => { chunks.push(chunk); res.write(chunk); });
+    forwardRes.on("data", chunk => {
+      if (dumper) dumper.writeChunk(chunk);
+      if (onResponse) chunks.push(chunk);
+      res.write(chunk);
+    });
     forwardRes.on("end", () => {
+      if (dumper) dumper.end();
       res.end();
-      try { onResponse(Buffer.concat(chunks), forwardRes.headers); } catch { /* ignore */ }
+      if (onResponse) try { onResponse(Buffer.concat(chunks), forwardRes.headers); } catch { /* ignore */ }
     });
   });
 
   forwardReq.on("error", (e) => {
     err(`Passthrough error: ${e.message}`);
+    if (dumper) { dumper.writeChunk(`\n[ERROR] ${e.message}\n`); dumper.end(); }
     if (!res.headersSent) res.writeHead(502);
     res.end("Bad Gateway");
   });
@@ -179,7 +183,7 @@ const server = https.createServer(sslOptions, async (req, res) => {
     }
 
     const bodyBuffer = await collectBodyRaw(req);
-    if (bodyBuffer.length > 0) saveRequestLog(req.url, bodyBuffer);
+    if (ENABLE_FILE_LOG) dumpRequest(req, bodyBuffer, "raw");
 
     // Anti-loop: skip requests from 9Router
     if (req.headers[INTERNAL_REQUEST_HEADER.name] === INTERNAL_REQUEST_HEADER.value) {
@@ -193,25 +197,18 @@ const server = https.createServer(sslOptions, async (req, res) => {
     const isChat = patterns.some(p => req.url.includes(p));
     if (!isChat) return passthrough(req, res, bodyBuffer);
 
-    log(`🔍 [${tool}] url=${req.url} | bodyLen=${bodyBuffer.length}`);
-
     // Cursor uses binary proto — model extraction not possible at this layer.
     // Delegate directly to handler which decodes proto internally.
     if (tool === "cursor") {
-      log(`⚡ intercept | cursor | proto`);
       return handlers[tool].intercept(req, res, bodyBuffer, null, passthrough);
     }
 
     const model = extractModel(req.url, bodyBuffer);
-    log(`🔍 [${tool}] model="${model}"`);
-
     const mappedModel = getMappedModel(tool, model);
     if (!mappedModel) {
-      log(`⏩ passthrough | no mapping | ${tool} | ${model || "unknown"}`);
       return passthrough(req, res, bodyBuffer);
     }
 
-    log(`⚡ intercept | ${tool} | ${model} → ${mappedModel}`);
     return handlers[tool].intercept(req, res, bodyBuffer, mappedModel, passthrough);
   } catch (e) {
     err(`Unhandled error: ${e.message}`);
@@ -266,7 +263,16 @@ server.on("error", (e) => {
   process.exit(1);
 });
 
-const shutdown = () => server.close(() => process.exit(0));
+const { removeAllDNSEntriesSync } = require("./dns/dnsConfig");
+let isShuttingDown = false;
+const shutdown = () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  // Strip tool hosts from /etc/hosts so other apps aren't broken after exit
+  removeAllDNSEntriesSync();
+  const forceExit = setTimeout(() => process.exit(0), 1500);
+  server.close(() => { clearTimeout(forceExit); process.exit(0); });
+};
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 if (process.platform === "win32") process.on("SIGBREAK", shutdown);

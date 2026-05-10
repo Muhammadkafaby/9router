@@ -13,6 +13,8 @@ import { OpenCodeExecutor } from "./opencode.js";
 import { OpenCodeGoExecutor } from "./opencode-go.js";
 import { GrokWebExecutor } from "./grok-web.js";
 import { PerplexityWebExecutor } from "./perplexity-web.js";
+import { OllamaLocalExecutor } from "./ollama-local.js";
+import { CommandCodeExecutor } from "./commandcode.js";
 import { DefaultExecutor } from "./default.js";
 
 const executors = {
@@ -33,6 +35,8 @@ const executors = {
   "opencode-go": new OpenCodeGoExecutor(),
   "grok-web": new GrokWebExecutor(),
   "perplexity-web": new PerplexityWebExecutor(),
+  "ollama-local": new OllamaLocalExecutor(),
+  commandcode: new CommandCodeExecutor(),
 };
 
 const defaultCache = new Map();
@@ -64,3 +68,5 @@ export { OpenCodeExecutor } from "./opencode.js";
 export { OpenCodeGoExecutor } from "./opencode-go.js";
 export { GrokWebExecutor } from "./grok-web.js";
 export { PerplexityWebExecutor } from "./perplexity-web.js";
+export { OllamaLocalExecutor } from "./ollama-local.js";
+export { CommandCodeExecutor } from "./commandcode.js";

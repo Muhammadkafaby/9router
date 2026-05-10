@@ -251,6 +251,14 @@ export const PROVIDERS = {
     baseUrl: "https://api.deepseek.com/chat/completions",
     format: "openai"
   },
+  commandcode: {
+    baseUrl: "https://api.commandcode.ai/alpha/generate",
+    format: "commandcode",
+    headers: {
+      "x-command-code-version": "0.25.7",
+      "x-cli-environment": "cli"
+    }
+  },
   groq: {
     baseUrl: "https://api.groq.com/openai/v1/chat/completions",
     format: "openai"
@@ -366,6 +374,15 @@ export const PROVIDERS = {
     baseUrl: "",
     format: "openai",
     headers: {}
+  },
+  // Cloudflare Workers AI - {accountId} resolved from credentials.providerSpecificData.accountId
+  "cloudflare-ai": {
+    baseUrl: "https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/v1/chat/completions",
+    format: "openai"
+  },
+  "xiaomi-mimo": {
+    baseUrl: "https://api.xiaomimimo.com/v1/chat/completions",
+    format: "openai"
   },
 };
 

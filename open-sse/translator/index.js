@@ -5,7 +5,6 @@ import { cloakClaudeTools } from "../utils/claudeCloaking.js";
 import { filterToOpenAIFormat } from "./helpers/openaiHelper.js";
 import { normalizeThinkingConfig } from "../services/provider.js";
 import { AntigravityExecutor } from "../executors/antigravity.js";
-import { compressMessages, formatRtkLog } from "../rtk/index.js";
 
 // Registry for translators
 const requestRegistry = new Map();
@@ -41,6 +40,7 @@ function ensureInitialized() {
   require("./request/openai-to-kiro.js");
   require("./request/openai-to-cursor.js");
   require("./request/openai-to-ollama.js");
+  require("./request/openai-to-commandcode.js");
 
   // Response translators
   require("./response/claude-to-openai.js");
@@ -51,6 +51,7 @@ function ensureInitialized() {
   require("./response/kiro-to-openai.js");
   require("./response/cursor-to-openai.js");
   require("./response/ollama-to-openai.js");
+  require("./response/commandcode-to-openai.js");
 }
 
 // Strip specific content types from messages (explicit opt-in via strip[] in PROVIDER_MODELS)
@@ -71,16 +72,9 @@ function stripContentTypes(body, stripList = []) {
 }
 
 // Translate request: source -> openai -> target
-export function translateRequest(sourceFormat, targetFormat, model, body, stream = true, credentials = null, provider = null, reqLogger = null, stripList = [], connectionId = null, rtkEnabled = false) {
+export function translateRequest(sourceFormat, targetFormat, model, body, stream = true, credentials = null, provider = null, reqLogger = null, stripList = [], connectionId = null, clientTool = null) {
   ensureInitialized();
   let result = body;
-
-  // RTK: compress tool_result content before any translation (shape-agnostic)
-  const rtkStats = compressMessages(result, rtkEnabled);
-  if (rtkStats) {
-    const line = formatRtkLog(rtkStats);
-    if (line) console.log(line);
-  }
 
   // Strip explicit content types (opt-in via strip[] in PROVIDER_MODELS entry)
   stripContentTypes(result, stripList);
@@ -140,15 +134,14 @@ export function translateRequest(sourceFormat, targetFormat, model, body, stream
     }
   }
 
-  // Antigravity cloaking: rename client tools + inject decoys (anti-ban)
-  // Skip if client is native AG (userAgent = antigravity)
-  if (provider === FORMATS.ANTIGRAVITY && body.userAgent !== FORMATS.ANTIGRAVITY) {
-    const { cloakedBody, toolNameMap } = AntigravityExecutor.cloakTools(result);
-    result = cloakedBody;
-    if (toolNameMap?.size > 0) {
-      result._toolNameMap = toolNameMap;
-    }
-  }
+  // Antigravity cloaking disabled
+  // if (provider === FORMATS.ANTIGRAVITY && body.userAgent !== FORMATS.ANTIGRAVITY) {
+  //   const { cloakedBody, toolNameMap } = AntigravityExecutor.cloakTools(result);
+  //   result = cloakedBody;
+  //   if (toolNameMap?.size > 0) {
+  //     result._toolNameMap = toolNameMap;
+  //   }
+  // }
 
   return result;
 }

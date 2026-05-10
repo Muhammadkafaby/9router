@@ -1,17 +1,95 @@
 import { NextResponse } from "next/server";
 import { getProviderNodeById } from "@/models";
-import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
+import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider, AI_PROVIDERS } from "@/shared/constants/providers";
 import { getDefaultModel } from "open-sse/config/providerModels.js";
-import { resolveOllamaLocalHost } from "open-sse/config/providers.js";
+import { resolveOllamaLocalHost, PROVIDERS } from "open-sse/config/providers.js";
+import { openaiToCommandCode } from "open-sse/translator/request/openai-to-commandcode.js";
 import { PROVIDER_ENDPOINTS } from "@/shared/constants/config";
+import { normalizeProviderId } from "@/lib/providerNormalization";
+
+// Probe a webSearch/webFetch provider using its searchConfig/fetchConfig.
+// Returns true if API key is accepted (status !== 401 && !== 403).
+async function probeWebProvider(provider, apiKey) {
+  const p = AI_PROVIDERS[provider];
+  if (!p) return null;
+  // Skip if provider has dual-purpose (LLM + search), let LLM validate handle it
+  const kinds = p.serviceKinds || ["llm"];
+  const isWebOnly = kinds.every((k) => k === "webSearch" || k === "webFetch");
+  if (!isWebOnly) return null;
+  const cfg = p.searchConfig || p.fetchConfig;
+  if (!cfg) return null;
+  if (cfg.authType === "none") return true; // no-auth (e.g. searxng)
+
+  let url = cfg.baseUrl;
+  const headers = { "Content-Type": "application/json" };
+  let body;
+
+  // Apply auth based on authHeader
+  switch (cfg.authHeader) {
+    case "bearer":              headers["Authorization"] = `Bearer ${apiKey}`; break;
+    case "x-api-key":           headers["x-api-key"] = apiKey; break;
+    case "x-subscription-token":headers["x-subscription-token"] = apiKey; break;
+    case "key":                 url += `?key=${encodeURIComponent(apiKey)}&q=ping&cx=test`; break; // google-pse
+    case "api_key":             url += `?api_key=${encodeURIComponent(apiKey)}&q=ping&engine=google`; break; // searchapi
+  }
+
+  // Minimal body for POST endpoints; GET sends nothing
+  if (cfg.method === "POST") {
+    body = JSON.stringify({ query: "ping", q: "ping", url: "https://example.com" });
+  }
+
+  const res = await fetch(url, { method: cfg.method, headers, body, signal: AbortSignal.timeout(8000) });
+  return res.status !== 401 && res.status !== 403;
+}
+
+// Probe a media provider (tts/embedding/stt/image/video) using *Config.
+// Returns true if API key is accepted; null to skip (let default handler decide).
+async function probeMediaProvider(provider, apiKey) {
+  const p = AI_PROVIDERS[provider];
+  if (!p) return null;
+  const MEDIA_KINDS = new Set(["tts", "embedding", "stt", "image", "video", "music", "imageToText"]);
+  const kinds = p.serviceKinds || ["llm"];
+  const isMediaOnly = kinds.every((k) => MEDIA_KINDS.has(k));
+  if (!isMediaOnly) return null;
+  const cfg = p.ttsConfig || p.sttConfig || p.embeddingConfig || p.imageConfig || p.videoConfig || p.musicConfig;
+  // No probe config → best-effort accept (validate at usage time)
+  if (!cfg) return true;
+  if (p.noAuth || cfg.authType === "none") return true;
+  // Skip auth schemes that need provider-specific data
+  if (cfg.authHeader === "playht" || cfg.authHeader === "aws-sigv4") return true;
+
+  const headers = { "Content-Type": "application/json", ...(cfg.extraHeaders || {}) };
+
+  switch (cfg.authHeader) {
+    case "bearer":     headers["Authorization"] = `Bearer ${apiKey}`; break;
+    case "key":        headers["Authorization"] = `Key ${apiKey}`; break;
+    case "x-api-key":  headers["x-api-key"] = apiKey; break;
+    case "x-key":      headers["x-key"] = apiKey; break;
+    case "xi-api-key": headers["xi-api-key"] = apiKey; break;
+    case "token":      headers["Authorization"] = `Token ${apiKey}`; break;
+    case "basic":      headers["Authorization"] = `Basic ${apiKey}`; break;
+    default: return null;
+  }
+
+  const method = cfg.method || "POST";
+  const res = await fetch(cfg.baseUrl, {
+    method,
+    headers,
+    body: method === "GET" ? undefined : JSON.stringify({ input: "ping", text: "ping", prompt: "ping", model: cfg.models?.[0]?.id || "test" }),
+    signal: AbortSignal.timeout(8000),
+  });
+  return res.status !== 401 && res.status !== 403;
+}
 
 // POST /api/providers/validate - Validate API key with provider
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { provider, apiKey, providerSpecificData } = body;
+    const provider = normalizeProviderId(body.provider);
+    const { apiKey, providerSpecificData } = body;
 
-    if (!provider || (!apiKey && provider !== "ollama-local")) {
+    const isNoAuth = AI_PROVIDERS[provider]?.noAuth === true;
+    if (!provider || (!apiKey && provider !== "ollama-local" && !isNoAuth)) {
       return NextResponse.json({ error: "Provider and API key required" }, { status: 400 });
     }
 
@@ -95,6 +173,29 @@ export async function POST(request) {
         });
       }
 
+      if (provider === "cloudflare-ai") {
+        const { providerSpecificData } = body;
+        const accountId = providerSpecificData?.accountId;
+        if (!accountId) {
+          return NextResponse.json({ valid: false, error: "Missing Account ID" });
+        }
+        const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`;
+        const cfRes = await fetch(url, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: getDefaultModel("cloudflare-ai"),
+            messages: [{ role: "user", content: "test" }],
+            max_tokens: 1,
+          }),
+        });
+        isValid = cfRes.status !== 401 && cfRes.status !== 403 && cfRes.status !== 404;
+        return NextResponse.json({
+          valid: isValid,
+          error: isValid ? null : "Invalid API token or Account ID",
+        });
+      }
+
       if (provider === "azure") {
         const { providerSpecificData } = body;
         const endpoint = (providerSpecificData?.azureEndpoint || "").replace(/\/$/, "");
@@ -121,6 +222,24 @@ export async function POST(request) {
         return NextResponse.json({
           valid: isValid,
           error: isValid ? null : "Invalid API key or Azure configuration",
+        });
+      }
+
+      // Generic probe for webSearch/webFetch providers (config-driven)
+      const webResult = await probeWebProvider(provider, apiKey);
+      if (webResult !== null) {
+        return NextResponse.json({
+          valid: webResult,
+          error: webResult ? null : "Invalid API key",
+        });
+      }
+
+      // Generic probe for tts/embedding providers (config-driven)
+      const mediaResult = await probeMediaProvider(provider, apiKey);
+      if (mediaResult !== null) {
+        return NextResponse.json({
+          valid: mediaResult,
+          error: mediaResult ? null : "Invalid API key",
         });
       }
 
@@ -247,6 +366,7 @@ export async function POST(request) {
         case "assemblyai":
         case "nanobanana":
         case "chutes":
+        case "xiaomi-mimo":
         case "nvidia": {
           const endpoints = {
             deepseek: "https://api.deepseek.com/models",
@@ -266,12 +386,18 @@ export async function POST(request) {
             assemblyai: "https://api.assemblyai.com/v1/account",
             nanobanana: "https://api.nanobananaapi.ai/v1/models",
             chutes: "https://llm.chutes.ai/v1/models",
-            nvidia: "https://integrate.api.nvidia.com/v1/models"
+            nvidia: "https://integrate.api.nvidia.com/v1/models",
+            "xiaomi-mimo": "https://api.xiaomimimo.com/v1/models"
           };
           const headers = {};
           if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
           const res = await fetch(endpoints[provider], { headers });
-          isValid = res.ok;
+          // xai returns 400 for bad key, 403 for valid-but-no-credit. Other providers use 401.
+          if (provider === "xai") {
+            isValid = res.status === 200 || res.status === 403;
+          } else {
+            isValid = res.ok;
+          }
           break;
         }
 
@@ -285,6 +411,28 @@ export async function POST(request) {
               max_tokens: 1,
               stream: false,
             }),
+          });
+          isValid = res.status !== 401 && res.status !== 403;
+          break;
+        }
+
+        case "commandcode": {
+          const cfg = PROVIDERS.commandcode;
+          const model = getDefaultModel("commandcode");
+          const payload = openaiToCommandCode(model, {
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1,
+            stream: false,
+          }, false);
+          const res = await fetch(cfg.baseUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(cfg.headers || {}),
+              "x-session-id": crypto.randomUUID(),
+              "Authorization": `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(payload),
           });
           isValid = res.status !== 401 && res.status !== 403;
           break;

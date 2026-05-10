@@ -1,0 +1,4 @@
+ai.devstacklabs.net {
+    encode gzip zstd
+    reverse_proxy 9router:20128
+}

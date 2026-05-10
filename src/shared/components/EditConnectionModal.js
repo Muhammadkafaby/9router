@@ -20,6 +20,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
     deployment: "",
     organization: "",
   });
+  const [cloudflareData, setCloudflareData] = useState({ accountId: "" });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [validating, setValidating] = useState(false);
@@ -42,6 +43,9 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           organization: connection.providerSpecificData.organization || "",
         });
       }
+      if (connection.provider === "cloudflare-ai" && connection.providerSpecificData) {
+        setCloudflareData({ accountId: connection.providerSpecificData.accountId || "" });
+      }
       setTestResult(null);
       setValidationResult(null);
     }
@@ -49,6 +53,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
 
   const isOAuth = connection?.authType === "oauth";
   const isAzure = connection?.provider === "azure";
+  const isCloudflareAi = connection?.provider === "cloudflare-ai";
   const isCompatible = connection
     ? (isOpenAICompatibleProvider(connection.provider) || isAnthropicCompatibleProvider(connection.provider))
     : false;
@@ -80,6 +85,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           provider: connection.provider,
           apiKey: formData.apiKey,
           ...(isAzure ? { providerSpecificData: azureData } : {}),
+          ...(isCloudflareAi ? { providerSpecificData: cloudflareData } : {}),
         }),
       });
       const data = await res.json();
@@ -113,6 +119,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
                 provider: connection.provider,
                 apiKey: formData.apiKey,
                 ...(isAzure ? { providerSpecificData: azureData } : {}),
+                ...(isCloudflareAi ? { providerSpecificData: cloudflareData } : {}),
               }),
             });
             const data = await res.json();
@@ -139,6 +146,9 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           deployment: azureData.deployment,
           organization: azureData.organization,
         };
+      }
+      if (isCloudflareAi) {
+        updates.providerSpecificData = { accountId: cloudflareData.accountId };
       }
       
       await onSave(updates);
@@ -233,7 +243,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           </div>
         )}
 
-        {!isCompatible && !isAzure && (
+        {!isCompatible && !isAzure && !isCloudflareAi && (
           <div className="flex items-center gap-3">
             <Button onClick={handleTest} variant="secondary" disabled={testing}>
               {testing ? "Testing..." : "Test Connection"}
