@@ -570,8 +570,7 @@ export function startLogin(hostname) {
       return;
     }
 
-    // Force re-auth on Win when device may have been removed from tailnet
-    const args = tsArgs("up", "--accept-routes", "--force-reauth");
+    const args = tsArgs("up", "--accept-routes");
     if (hostname) args.push(`--hostname=${hostname}`);
     const child = spawn(bin, args, {
       stdio: ["ignore", "pipe", "pipe"],

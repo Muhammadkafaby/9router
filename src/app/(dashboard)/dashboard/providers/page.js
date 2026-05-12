@@ -120,12 +120,25 @@ export default function ProvidersPage() {
     !searchQuery.trim() ||
     name.toLowerCase().includes(searchQuery.trim().toLowerCase());
 
-  const sortByConnections = (entries, authType) =>
-    [...entries].sort(
-      (a, b) =>
-        getProviderStats(b[0], authType).total -
-        getProviderStats(a[0], authType).total,
-    );
+  const sortByPriority = (entries, authType) =>
+    [...entries].sort(([ka, a], [kb, b]) => {
+      const sa = getProviderStats(ka, authType);
+      const sb = getProviderStats(kb, authType);
+      const ca = sa.connected > 0 ? 1 : 0;
+      const cb = sb.connected > 0 ? 1 : 0;
+      if (ca !== cb) return cb - ca;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
+  const sortItemsByPriority = (items, authType) =>
+    [...items].sort((a, b) => {
+      const sa = getProviderStats(a.id, authType);
+      const sb = getProviderStats(b.id, authType);
+      const ca = sa.connected > 0 ? 1 : 0;
+      const cb = sb.connected > 0 ? 1 : 0;
+      if (ca !== cb) return cb - ca;
+      return (a.name || "").localeCompare(b.name || "");
+    });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -269,7 +282,7 @@ export default function ProvidersPage() {
   const freeTierEntries = Object.entries(FREE_TIER_PROVIDERS).filter(
     ([, info]) => matchSearch(info.name),
   );
-  const apikeyEntries = sortByConnections(
+  const apikeyEntries = sortByPriority(
     Object.entries(APIKEY_PROVIDERS).filter(
       ([, info]) =>
         (info.serviceKinds ?? ["llm"]).includes("llm") && matchSearch(info.name),
