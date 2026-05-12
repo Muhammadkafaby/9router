@@ -221,27 +221,64 @@ const server = https.createServer(sslOptions, async (req, res) => {
 function killPort(port) {
   try {
     let pidList = [];
+
     if (IS_WIN) {
-      const psCmd = `powershell -NonInteractive -WindowStyle Hidden -Command ` +
+      const psCmd =
+        `powershell -NonInteractive -WindowStyle Hidden -Command ` +
         `"Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess"`;
-      const out = execSync(psCmd, { encoding: "utf-8", windowsHide: true }).trim();
+
+      const out = execSync(psCmd, {
+        encoding: "utf-8",
+        windowsHide: true,
+      }).trim();
+
       if (!out) return;
-      pidList = out.split(/\r?\n/).map(s => s.trim()).filter(p => p && Number(p) !== process.pid && Number(p) > 4);
+
+      pidList = out
+        .split(/\r?\n/)
+        .map(s => parseInt(String(s).trim(), 10))
+        .filter(pid =>
+          !Number.isNaN(pid) &&
+          pid > 4 &&
+          pid !== process.pid
+        );
+
     } else {
-      const out = execSync(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`, { encoding: "utf-8", windowsHide: true }).trim();
+      const out = execSync(
+        `lsof -t -iTCP:${port} -sTCP:LISTEN`,
+        { encoding: "utf-8" }
+      ).trim();
+
       if (!out) return;
-      pidList = out.split("\n").filter(p => p && Number(p) !== process.pid);
+
+      pidList = out
+        .split(/\r?\n/)
+        .map(s => parseInt(String(s).trim(), 10))
+        .filter(pid =>
+          !Number.isNaN(pid) &&
+          pid > 1 &&
+          pid !== process.pid
+        );
     }
+
     if (pidList.length === 0) return;
+
     pidList.forEach(pid => {
       try {
-        if (IS_WIN) execSync(`taskkill /F /PID ${pid}`, { windowsHide: true });
-        else process.kill(Number(pid), "SIGKILL");
+        if (IS_WIN) {
+          execSync(`taskkill /F /PID ${pid}`, {
+            windowsHide: true,
+          });
+        } else if (Number.isInteger(pid) && pid > 1) {
+          process.kill(pid, "SIGKILL");
+        }
       } catch (e) {
         err(`Failed to kill PID ${pid}: ${e.message}`);
       }
     });
+
     log(`Killed ${pidList.length} process(es) on port ${port}`);
+
   } catch (e) {
     if (e.status !== 1) throw e;
   }
@@ -257,22 +294,44 @@ try {
 server.listen(LOCAL_PORT, () => log(`🚀 Server ready on :${LOCAL_PORT}`));
 
 server.on("error", (e) => {
-  if (e.code === "EADDRINUSE") err(`Port ${LOCAL_PORT} already in use`);
-  else if (e.code === "EACCES") err(`Permission denied for port ${LOCAL_PORT}`);
-  else err(e.message);
+  if (e.code === "EADDRINUSE") {
+    err(`Port ${LOCAL_PORT} already in use`);
+  } else if (e.code === "EACCES") {
+    err(`Permission denied for port ${LOCAL_PORT}`);
+  } else {
+    err(e.message);
+  }
+
   process.exit(1);
 });
 
 const { removeAllDNSEntriesSync } = require("./dns/dnsConfig");
+
 let isShuttingDown = false;
+
 const shutdown = () => {
   if (isShuttingDown) return;
+
   isShuttingDown = true;
+
   // Strip tool hosts from /etc/hosts so other apps aren't broken after exit
-  removeAllDNSEntriesSync();
+  try {
+    removeAllDNSEntriesSync();
+  } catch (e) {
+    err(`DNS cleanup failed: ${e.message}`);
+  }
+
   const forceExit = setTimeout(() => process.exit(0), 1500);
-  server.close(() => { clearTimeout(forceExit); process.exit(0); });
+
+  server.close(() => {
+    clearTimeout(forceExit);
+    process.exit(0);
+  });
 };
+
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
-if (process.platform === "win32") process.on("SIGBREAK", shutdown);
+
+if (process.platform === "win32") {
+  process.on("SIGBREAK", shutdown);
+}

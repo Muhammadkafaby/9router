@@ -1,21 +1,38 @@
 # syntax=docker/dockerfile:1.7
 ARG BUN_IMAGE=oven/bun:1.3.2-alpine
+
 FROM ${BUN_IMAGE} AS base
 WORKDIR /app
 
+# =========================
+# Builder
+# =========================
 FROM base AS builder
 
-RUN apk --no-cache upgrade && apk --no-cache add nodejs npm python3 make g++ linux-headers
+RUN apk --no-cache add \
+    nodejs \
+    npm \
+    python3 \
+    make \
+    g++ \
+    linux-headers
 
 COPY package.json ./
+
 RUN --mount=type=cache,target=/root/.npm \
-  npm install
+    npm install
 
 COPY . ./
+
 ENV NEXT_TELEMETRY_DISABLED=1
+
 RUN npm run build
 
+# =========================
+# Runner
+# =========================
 FROM ${BUN_IMAGE} AS runner
+
 WORKDIR /app
 
 LABEL org.opencontainers.image.title="9router"
@@ -26,23 +43,39 @@ ENV HOSTNAME=0.0.0.0
 ENV DATA_DIR=/app/data
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/static ./.next/static
+# Next standalone output
 COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/open-sse ./open-sse
-# Next file tracing can omit sibling files; MITM runs server.js as a separate process.
-COPY --from=builder /app/src/mitm ./src/mitm
-# Standalone node_modules may omit deps only required by the MITM child process.
-COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
+# Static assets
+COPY --from=builder /app/.next/static ./app/.next/static
+COPY --from=builder /app/public ./app/public
+
+# Extra runtime files
+# Extra runtime files
+COPY --from=builder /app/open-sse ./app/open-sse
+COPY --from=builder /app/src/mitm ./app/src/mitm
+COPY --from=builder /app/src/shared ./app/src/shared
+
+# Extra dependency required by MITM child process
+COPY --from=builder /app/node_modules/node-forge ./app/node_modules/node-forge
+
+# Prepare writable data dir
 RUN mkdir -p /app/data && chown -R bun:bun /app
 
-# Fix permissions at runtime (handles mounted volumes)
-RUN apk --no-cache upgrade && apk --no-cache add su-exec && \
-  printf '#!/bin/sh\nDATA_PATH="${DATA_DIR:-/app/data}"\nmkdir -p "$DATA_PATH" 2>/dev/null || true\nchown -R bun:bun "$DATA_PATH" 2>/dev/null || true\nchown -R bun:bun /app/data 2>/dev/null || true\nexec su-exec bun "$@"\n' > /entrypoint.sh && \
-  chmod +x /entrypoint.sh
+# Runtime entrypoint
+RUN apk --no-cache add su-exec && \
+    printf '#!/bin/sh\n\
+DATA_PATH="${DATA_DIR:-/app/data}"\n\
+mkdir -p "$DATA_PATH"\n\
+chown -R bun:bun /app\n\
+exec su-exec bun "$@"\n' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
 
 EXPOSE 20128
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["bun", "server.js"]
+
+# IMPORTANT:
+# Based on your standalone output:
+# .next/standalone/9router/server.js
+CMD ["node","app/server.js"]
